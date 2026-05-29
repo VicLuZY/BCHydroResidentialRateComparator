@@ -1,0 +1,6 @@
+examples/
+*.zip
+bchydro-rate-comparator/dist/
+bchydro-rate-comparator/test-results/
+bchydro-rate-comparator/playwright-report/
+bchydro-rate-comparator/node_modules/

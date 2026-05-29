@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BC Hydro Residential Rate Comparator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">BC Hydro residential rate comparison</p>
+      <h1>Residential Rate Comparator</h1>
+      <p class="subtitle">Upload BC Hydro hourly consumption CSV files and compare annual costs for RS 1101, RS 1101 + 2101, RS 1151, and RS 1151 + 2101.</p>
+    </div>
+    <div class="hero-card">
+      <div class="small-label">Default tariff set</div>
+      <strong>Effective April 1, 2026</strong>
+      <span>Editable rate assumptions are included below.</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel upload-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 1</p>
+          <h2>Upload consumption CSVs</h2>
+        </div>
+        <button id="clearButton" class="ghost-button" type="button">Clear</button>
+      </div>
+
+      <label id="dropZone" class="drop-zone" for="fileInput">
+        <input id="fileInput" type="file" accept=".csv,text/csv" multiple>
+        <span class="drop-icon">⇧</span>
+        <strong>Drop BC Hydro CSV files here</strong>
+        <span>or click to choose files. Multiple segmented files for the same meter are merged.</span>
+      </label>
+
+      <div id="fileSummary" class="file-summary muted">No files loaded.</div>
+    </section>
+
+    <section class="panel" id="settingsPanel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 2</p>
+          <h2>Rate assumptions</h2>
+        </div>
+        <button id="resetRatesButton" class="ghost-button" type="button">Reset rates</button>
+      </div>
+
+      <details open>
+        <summary>Residential rate constants</summary>
+        <div class="rate-grid">
+          <label>RS 1101 basic charge, ¢/day<input id="rs1101Basic" type="number" step="0.0001"></label>
+          <label>RS 1101 Step 1 energy, ¢/kWh<input id="rs1101Step1" type="number" step="0.0001"></label>
+          <label>RS 1101 Step 2 energy, ¢/kWh<input id="rs1101Step2" type="number" step="0.0001"></label>
+          <label>RS 1101 Step 1 allowance, kWh/day<input id="rs1101Step1Daily" type="number" step="0.0001"></label>
+          <label>RS 1151 basic charge, ¢/day<input id="rs1151Basic" type="number" step="0.0001"></label>
+          <label>RS 1151 energy, ¢/kWh<input id="rs1151Energy" type="number" step="0.0001"></label>
+          <label>RS 2101 overnight credit, ¢/kWh<input id="rs2101Overnight" type="number" step="0.0001"></label>
+          <label>RS 2101 on-peak charge, ¢/kWh<input id="rs2101OnPeak" type="number" step="0.0001"></label>
+          <label>RS 2101 off-peak adjustment, ¢/kWh<input id="rs2101OffPeak" type="number" step="0.0001"></label>
+          <label>Deferral Account Rate Rider, %<input id="deferralRider" type="number" step="0.0001"></label>
+          <label>Trade Income Rate Rider, %<input id="tradeRider" type="number" step="0.0001"></label>
+          <label class="checkbox-row"><input id="includeGst" type="checkbox"> Include tax estimate</label>
+          <label>Tax estimate, %<input id="gstRate" type="number" step="0.0001"></label>
+        </div>
+      </details>
+
+      <p class="note">Rates are stored locally in this page and can be updated when BC Hydro changes its tariff. The default comparison includes the rate riders on the base residential rate schedules and does not apply riders to the time-of-day adjustment.</p>
+    </section>
+
+    <section class="panel" id="analysisPanel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 3</p>
+          <h2>Meter and analysis window</h2>
+        </div>
+        <button id="exportButton" class="ghost-button" type="button" disabled>Export summary CSV</button>
+      </div>
+
+      <div class="controls-grid">
+        <label>Meter group<select id="meterSelect" disabled></select></label>
+        <label>Analysis mode<select id="modeSelect" disabled>
+          <option value="latest365">Latest continuous 365-day period</option>
+          <option value="allAnnualized">Longest complete run, annualized</option>
+          <option value="custom">Custom complete date range</option>
+        </select></label>
+        <label>Baseline option<select id="baselineSelect" disabled>
+          <option value="rs1101">RS 1101</option>
+          <option value="rs1101Tou">RS 1101 + RS 2101</option>
+          <option value="rs1151">RS 1151</option>
+          <option value="rs1151Tou">RS 1151 + RS 2101</option>
+        </select></label>
+        <label>Start date<input id="startDate" type="date" disabled></label>
+        <label>End date<input id="endDate" type="date" disabled></label>
+      </div>
+
+      <div id="validationSummary" class="validation-summary muted">Upload files to begin validation.</div>
+    </section>
+
+    <section id="resultsPanel" class="panel results-panel hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Results</p>
+          <h2>Annual cost comparison</h2>
+        </div>
+        <button id="printButton" class="ghost-button" type="button">Print</button>
+      </div>
+
+      <div id="winnerCard" class="winner-card"></div>
+      <div id="metricsGrid" class="metrics-grid"></div>
+      <div id="costChart" class="chart"></div>
+
+      <div class="table-wrap">
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Option</th>
+              <th>Annual cost</th>
+              <th>Diff from cheapest</th>
+              <th>Diff from baseline</th>
+              <th>Basic</th>
+              <th>Energy</th>
+              <th>TOU adjustment</th>
+              <th>Riders</th>
+              <th>Tax</th>
+              <th>Effective ¢/kWh</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="usagePanel" class="panel hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Load profile</p>
+          <h2>Monthly and time-of-day breakdown</h2>
+        </div>
+      </div>
+      <div id="usageChart" class="usage-chart"></div>
+      <div class="table-wrap compact-table-wrap">
+        <table id="monthlyTable">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Total kWh</th>
+              <th>Overnight kWh</th>
+              <th>On-peak kWh</th>
+              <th>Off-peak kWh</th>
+              <th>RS 1101</th>
+              <th>RS 1101 + 2101</th>
+              <th>RS 1151</th>
+              <th>RS 1151 + 2101</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="gapPanel" class="panel hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Data quality</p>
+          <h2>Gap and overlap report</h2>
+        </div>
+      </div>
+      <div id="gapReport"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>All CSV parsing and calculations run inside your browser. No upload to a server is required.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

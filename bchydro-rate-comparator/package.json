@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:pages": "npm run build && node scripts/build-pages.mjs",
+    "pretest": "npm run build",
+    "test": "node tests/rate-comparator.test.js",
+    "pretest:examples": "npm run build",
+    "test:examples": "node tests/example-files-smoke.test.js",
+    "pretest:browser": "npm run build:pages",
+    "test:browser": "playwright test tests/browser-upload-smoke.test.js --reporter=line"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "typescript": "^6.0.3"
+  }
+}

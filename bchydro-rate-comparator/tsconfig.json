@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "none",
+    "lib": ["DOM", "ES2022"],
+    "rootDir": "src",
+    "outFile": "app.js",
+    "allowJs": false,
+    "checkJs": false,
+    "strict": false,
+    "noEmitOnError": true,
+    "removeComments": false,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src/**/*.ts"]
+}

@@ -1,0 +1,255 @@
+/goal
+
+Build and harden an interactive local website that compares BC Hydro residential electricity rate options using BC Hydro hourly consumption CSV exports.
+
+Primary outcome
+
+The website must let a user upload one or more BC Hydro consumption CSV files, merge segmented files for the same meter, validate that the reconstructed interval data contains at least one complete continuous year, and compare the estimated annual cost under these four options:
+
+1. RS 1101
+2. RS 1101 + RS 2101
+3. RS 1151
+4. RS 1151 + RS 2101
+
+Do not implement, display, or optimize for net metering, self-generation, customer generation, community generation, or export credit rate schedules. If uploaded data contains outflow or negative net consumption, flag it clearly and do not treat exported energy as a credit under any non-generation rate option.
+
+Preferred architecture
+
+Use a static browser-only app unless there is a compelling reason to do otherwise. The user should be able to open index.html locally or host the folder as static files. All CSV parsing and rate calculations must happen client-side. Do not upload, transmit, log, or persist customer data outside the browser.
+
+If an existing codebase is present, improve it rather than starting over unless the existing implementation is clearly defective. Treat this /goal file as the source of truth.
+
+Input file format
+
+The app must ingest CSV files formatted like BC Hydro MyHydro consumption exports with these columns:
+
+Account Holder
+Account Number
+Meter Number
+Interval Start Date/Time
+Time of Day Period
+Inflow (kWh)
+Outflow (kWh)
+Net Consumption (kWh)
+Demand (kW)
+Power Factor (%)
+Estimated Usage
+Service Address
+City
+
+The parser must:
+
+- accept quoted CSV fields;
+- preserve account numbers that may begin with an apostrophe;
+- parse timestamps in the format YYYY-MM-DD HH:mm as local British Columbia/Pacific civil time;
+- parse numeric kWh values robustly;
+- use Net Consumption (kWh) for cost calculation when available;
+- fall back to Inflow (kWh) minus Outflow (kWh) only when Net Consumption (kWh) is blank;
+- ignore Demand and Power Factor for residential energy cost calculations;
+- not rely on the Time of Day Period column because exported data may show N/A even when evaluating TOU scenarios.
+
+Multiple file handling
+
+The app must allow users to upload several CSV files at the same time.
+
+Group records by meter identity. The primary grouping key should be Account Number + Meter Number. Show the service address and city only as user-facing descriptors. Do not expose unnecessary personally identifiable details in exported test data or committed fixtures.
+
+For segmented files from the same meter:
+
+- merge all records in chronological order;
+- reconstruct one unified interval series;
+- allow overlapping file boundaries;
+- if duplicate intervals are exact duplicates with the same kWh values, coalesce them;
+- if duplicate intervals conflict, flag the conflict and block calculation for the affected meter until the user removes or resolves the conflict;
+- allow the expected fall daylight saving repeated 01:00 interval as two separate valid records, not as a normal duplicate;
+- if more than the expected number of intervals occurs for a timestamp, flag it.
+
+If the user uploads files from different meters, show each meter as a separate selectable analysis group. Do not silently combine different meters.
+
+Continuity and data quality validation
+
+Before producing the annual comparison, the selected meter must have at least one complete continuous 365-calendar-day window.
+
+Validation must be calendar-day based, not a naive 8,760-hour count, because Pacific daylight saving time causes:
+
+- spring forward day: second Sunday in March, no 02:00 interval;
+- fall back day: first Sunday in November, two 01:00 intervals.
+
+For each local calendar day, the expected interval count is:
+
+- 23 records on spring-forward day;
+- 25 records on fall-back day;
+- 24 records on all other days.
+
+The app must:
+
+- find the latest complete continuous 365-day window by default;
+- allow the user to select another complete date range if available;
+- report missing days and missing hours;
+- report unexpected extra intervals;
+- report non-hourly or malformed timestamps;
+- report estimated usage flags, but do not automatically reject records only because the Estimated Usage field is populated;
+- present an explicit pass/fail status for "at least one complete continuous year".
+
+Rate source references
+
+Use these sources as implementation references. Do not scrape these pages at runtime. Store rates as editable default assumptions in the app.
+
+BC Hydro residential rates page:
+https://www.bchydro.com/accounts-billing/rates-energy-use/electricity-rates/residential-rates.html
+
+BC Hydro tiered residential rate page:
+https://www.bchydro.com/accounts-billing/rates-energy-use/electricity-rates/residential-rates/tiered.html
+
+BC Hydro flat residential rate page:
+https://www.bchydro.com/accounts-billing/rates-energy-use/electricity-rates/residential-rates/flat.html
+
+BC Hydro time-of-day residential pricing page:
+https://www.bchydro.com/accounts-billing/rates-energy-use/electricity-rates/residential-rates/time-of-day.html
+
+BC Hydro Electric Tariff:
+https://www.bchydro.com/content/dam/BCHydro/customer-portal/documents/corporate/tariff-filings/electric-tariff/bchydro-electric-tariff.pdf
+
+Default rate assumptions
+
+Set the default rate table to the current tariff values known at implementation time, and make all values editable in the UI so that users can update them later without editing code.
+
+Default values to include:
+
+RS 1101 basic charge: 23.44 cents/day
+RS 1101 Step 1 energy charge: 11.87 cents/kWh
+RS 1101 Step 2 energy charge: 14.08 cents/kWh
+RS 1101 Step 1 allowance: 22.1918 kWh/day
+RS 1151 basic charge: 25.00 cents/day
+RS 1151 flat energy charge: 12.70 cents/kWh
+RS 2101 overnight adjustment: -5.00 cents/kWh
+RS 2101 on-peak adjustment: +5.00 cents/kWh
+RS 2101 off-peak adjustment: 0.00 cents/kWh
+Deferral Account Rate Rider: -1.50% on base residential charges
+Trade Income Rate Rider: 0.00% on base residential charges
+GST and other taxes: optional user-editable adders, disabled by default unless confirmed.
+
+The app must clearly label whether results are before tax or include taxes.
+
+Rate calculation requirements
+
+For RS 1101:
+
+- calculate the basic charge as cents/day times number of calendar days;
+- calculate the Tier 1 allowance as 22.1918 kWh/day times number of calendar days;
+- charge usage up to the allowance at the Step 1 rate;
+- charge usage above the allowance at the Step 2 rate;
+- apply applicable riders to the base RS 1101 charges.
+
+For RS 1151:
+
+- calculate the basic charge as cents/day times number of calendar days;
+- charge all kWh at the flat energy rate;
+- apply applicable riders to the base RS 1151 charges.
+
+For RS 2101 add-on scenarios:
+
+- first calculate the applicable RS 1101 or RS 1151 base cost;
+- classify every hourly interval by local clock time;
+- apply the overnight credit from 23:00 inclusive to 07:00 exclusive;
+- apply the on-peak surcharge from 16:00 inclusive to 21:00 exclusive;
+- apply no TOU adjustment to all other intervals;
+- do not apply the Deferral Account Rate Rider or Trade Income Rate Rider to the RS 2101 adjustment unless the tariff changes and the user explicitly updates that assumption;
+- include spring/fall daylight saving duplicate or missing local hours in the classification exactly as represented in the source data.
+
+Cost outputs
+
+The results table must show, at minimum:
+
+- rate option name;
+- basic charge;
+- energy charge;
+- TOU adjustment;
+- riders;
+- optional taxes, if enabled;
+- total annual cost;
+- annual difference from the cheapest option;
+- annual difference from the currently selected baseline option;
+- effective blended cents/kWh.
+
+The app must identify the lowest-cost option, but it must not auto-select or enrol the user in any rate.
+
+Visual and interaction requirements
+
+Provide a polished interactive dashboard with:
+
+- drag-and-drop CSV upload;
+- upload summary by file;
+- meter selector;
+- validation status panel;
+- date range selector for complete windows;
+- editable rate assumptions panel;
+- comparison table;
+- cost bar chart or equivalent visual comparison;
+- monthly usage and monthly cost breakdown;
+- TOU period usage breakdown;
+- gap and data-quality report;
+- print-friendly report view;
+- CSV export of the comparison result.
+
+Keep the landing page clean and do not include customer data, sample addresses, or sample account information in the codebase.
+
+Accuracy and edge cases
+
+Handle these cases deliberately:
+
+- leap years;
+- 365-day and 366-day input windows;
+- partial first or last day in uploaded data;
+- same meter split into multiple files;
+- overlapping segmented files;
+- conflicting duplicated intervals;
+- spring-forward missing 02:00 hour;
+- fall-back duplicated 01:00 hour;
+- blank numeric fields;
+- N/A fields;
+- export/outflow values;
+- negative net consumption;
+- different meters uploaded together;
+- files with the correct columns in a different order;
+- files with extra columns;
+- malformed files.
+
+Testing requirements
+
+Add test coverage or a repeatable validation harness for:
+
+- CSV parsing;
+- grouped meter merging;
+- duplicate and conflict handling;
+- gap detection;
+- daylight saving validation;
+- RS 1101 tier calculation;
+- RS 1151 flat calculation;
+- RS 2101 TOU adjustment calculation;
+- rider application;
+- 365-day complete-window detection;
+- export generation.
+
+Use generated synthetic fixtures for tests. Do not commit real customer account numbers, names, addresses, or uploaded CSV contents.
+
+Acceptance criteria
+
+The implementation is acceptable when:
+
+1. The supplied BC Hydro CSV examples can be uploaded successfully.
+2. Each uploaded meter appears as a selectable meter group.
+3. Segmented files for the same meter merge into one chronological interval series.
+4. The app blocks annual comparison if no complete continuous 365-calendar-day window exists.
+5. The app produces results for RS 1101, RS 1101 + 2101, RS 1151, and RS 1151 + 2101 when a valid year exists.
+6. DST days are not incorrectly reported as gaps.
+7. The rate assumptions are visible and editable.
+8. The comparison output clearly identifies the lowest-cost option.
+9. The user can export the result to CSV.
+10. The app works without a backend server and without sending data outside the browser.
+
+Implementation notes for Codex
+
+Prefer clarity and correctness over cleverness. Keep the calculation code modular so tariff values, TOU windows, riders, parsing rules, and validation rules can be changed later. Add comments where tariff assumptions are encoded. Where the tariff is ambiguous or likely to change, expose the assumption in the UI rather than hiding it in code.
+
+Do not include net metering or self-generation rates. Do not add shopping links, advertising, trackers, analytics, or external dependencies that send uploaded data outside the browser.
