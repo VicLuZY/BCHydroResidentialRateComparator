@@ -6,6 +6,7 @@ const { pathToFileURL } = require("node:url");
 const { test, expect } = require("playwright/test");
 
 function appUrl() {
+  if (process.env.APP_URL) return process.env.APP_URL;
   const distIndex = path.resolve(__dirname, "..", "dist", "index.html");
   const sourceIndex = path.resolve(__dirname, "..", "index.html");
   return pathToFileURL(fs.existsSync(distIndex) ? distIndex : sourceIndex).href;
